@@ -136,6 +136,10 @@ without requiring a proprietary toolchain or a mainframe.
 Also, writing compilers is fun and someone left the MIL-STD on the
 internet where anyone could read it.
 
+## LSP
+
+Just like how people pair their wine with even more wine, here's an LSP for the language: [Jovial-LSP](https://github.com/Zaneham/Jovial-LSP)
+
 ## On the other Jovial compiler
 
 Anyone having a read of my profile may notice that theres not one but two (two!!) Jovial compilers. 
