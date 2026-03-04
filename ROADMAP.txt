@@ -1,0 +1,50 @@
+ROADMAP -- Skyhawk J73 Compiler
+================================
+Last updated: 2026-03-04
+
+Completed
+---------
+Phase 1:  Lexer (token.h, lexer.h, lexer.c)
+Phase 2:  Parser (ast.h, parser.h, parser.c)
+Phase 3:  Sema (sema.h, sema.c, layout.h, layout.c)
+Phase 4:  JIR SSA lowering (jir.h, jir_lower.c)
+Phase 5:  x86-64 backend -- spill-everything, JIT tests (x86.h, x86_emit.c)
+          87/87 tests. hello.jov=178B, procs.jov=425B.
+Phase 6:  GEP / TABLE codegen + inline COMPOOL
+          6a: Inline COMPOOL semantics — scope export, JIR lowering.
+          6b: GEP → x86 address arithmetic (base + idx*row + fld*8).
+              TABLE ALLOCA sizing, LEA for base addresses.
+              96/96 tests. tables.jov=320B.
+Phase 7:  COMPOOL binary serialization (src/cpl/)
+          cpl_write.c: sema → .cpl binary (types, STATUS, TABLE, symbols).
+          cpl_read.c: .cpl → sema import (type interning, index remapping).
+          CLI: --cpl flag for import, standalone COMPOOL → .cpl output.
+          100/100 tests.
+Phase 8:  mem2reg (jir_mem2reg.c)
+          Promote alloca/load/store to SSA values.
+          PHI insertion via dominance frontiers. Iterative rename.
+          102/102 tests.
+Phase 9:  Register allocation (x86_ra.c)
+          Linear scan over live intervals.
+          Proper reg assignment replacing spill-everything.
+          102/102 tests.
+Phase 10: PE-COFF object file emission (src/obj/)
+          obj_coff.c: x86 code buffer → .obj with symbol table.
+          -o flag wired in main.c. Internal fixups pre-resolved.
+          104/104 tests.
+
+Phase 11: Runtime + I/O
+          JOVIAL I/O statements, string ops, runtime library.
+          FORMAT/PRINT/READ stubs → C runtime calls.
+
+Phase 12: Optimisation passes
+          Constant folding, dead code elimination, strength reduction.
+          Basic block reordering, branch threading.
+
+Deferred
+--------
+- MIL-STD-1750A backend (src/m1750/) -- historical target, low priority
+- Fixed-point arithmetic (A n D s types)
+- POS bit-level operations
+- Full semantic type checking (coercion matrix)
+- Cross-compilation / hosted vs freestanding

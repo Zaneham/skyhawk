@@ -1,0 +1,24 @@
+START TABLES;
+
+  "test TABLE declarations with various features"
+
+  TABLE NAV'DATA(0:99);
+  BEGIN
+    ITEM LAT F 64;
+    ITEM LON F 64;
+    ITEM ALT S 32;
+    ITEM NAME C 20;
+  END
+
+  TABLE MATRIX(1:10, 1:10);
+  BEGIN
+    ITEM VAL F 32;
+  END
+
+  ITEM TOTAL S 32 = 0;
+
+  FOR TOTAL := 1 BY 1 WHILE TOTAL <= 10;
+    TOTAL := TOTAL + NAV'DATA(TOTAL).ALT;
+  END
+
+TERM

@@ -1,0 +1,19 @@
+START STATUS'TEST;
+
+  TYPE COLOUR STATUS(V(RED), V(GREEN), V(BLUE));
+
+  ITEM PAINT COLOUR = V(RED);
+
+  CASE PAINT;
+  BEGIN
+    V(RED) :
+      PAINT := V(GREEN);
+    V(GREEN) :
+      PAINT := V(BLUE);
+    V(BLUE) :
+      PAINT := V(RED);
+    DEFAULT :
+      ABORT;
+  END
+
+TERM

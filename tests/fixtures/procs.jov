@@ -1,0 +1,25 @@
+START PROCS;
+
+  DEFINE MAX'SIZE = 100;
+
+  PROC ADD(X, Y) S 32;
+  BEGIN
+    RETURN X + Y;
+  END
+
+  PROC SWAP(A, B : A, B);
+  BEGIN
+    ITEM TEMP S 32;
+    TEMP := A;
+    A := B;
+    B := TEMP;
+  END
+
+  ITEM RESULT S 32;
+  RESULT := ADD(3, 4);
+
+  ITEM P S 32 = 10;
+  ITEM Q S 32 = 20;
+  SWAP(P, Q : P, Q);
+
+TERM

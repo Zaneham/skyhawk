@@ -1,0 +1,10 @@
+# Build outputs
+*.exe
+*.o
+*.obj
+*.elf
+test_rv
+test_qemu
+
+# Generated COMPOOL binaries (tests produce these)
+tests/fixtures/*.cpl

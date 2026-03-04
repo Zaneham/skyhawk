@@ -1,0 +1,7 @@
+START HELLO;
+  ITEM GREETING C 20 = 'HELLO WORLD';
+  ITEM COUNT S 32;
+  FOR COUNT := 1 BY 1 WHILE COUNT <= 10;
+    "this would print something if we had I/O"
+  END
+TERM
