@@ -3,6 +3,7 @@
 *.o
 *.obj
 *.elf
+*.txt
 test_rv
 test_qemu
 
