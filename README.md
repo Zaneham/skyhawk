@@ -136,6 +136,12 @@ without requiring a proprietary toolchain or a mainframe.
 Also, writing compilers is fun and someone left the MIL-STD on the
 internet where anyone could read it.
 
+## Why Skyhawk? 
+
+Well the Royal New Zealand Airforce flew the A4k Skyhawk for years. In fact during its lifespan it received many coats of paint and most crucially F-16 avionics whos software was written in guess what, Jovial! 
+
+So theres a non zero chance that I am not the only Jovial programmer in New Zealand so this is both a historical project, an exercise in compiler theory and a cry for help. 
+
 ## LSP
 
 Just like how people pair their wine with even more wine, here's an LSP for the language: [Jovial-LSP](https://github.com/Zaneham/Jovial-LSP)
