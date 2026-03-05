@@ -1,9 +1,15 @@
 # Skyhawk
 
+<p align="center">
+  <img src="img/skyhawk.webp" alt="A-4 Skyhawk" width="600">
+</p>
+
 A compiler for JOVIAL J73 (MIL-STD-1589C), written in C99.
 Just 12,600 lines of C and a quiet determination to turn a 1970s avionics language into native
 machine code on modern hardware, because someone has to and it
 might as well be me.
+
+*A-4 Skyhawk drawing by [u/JKanitsorn](https://www.reddit.com/user/JKanitsorn)*
 
 ## What It Does
 
