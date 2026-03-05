@@ -6,6 +6,7 @@
 *.txt
 test_rv
 test_qemu
+test_
 
 # Generated COMPOOL binaries (tests produce these)
 tests/fixtures/*.cpl
