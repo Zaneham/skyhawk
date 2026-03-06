@@ -100,7 +100,7 @@ static uint16_t cmp_pp(const jir_mod_t *J, uint32_t fb, uint32_t nb)
         for (uint32_t ii = b->first;
              ii < b->first + b->n_inst && ii < J->n_inst; ii++) {
             g_pp[ii] = pp++;
-            if (pp == 0) pp = 0xFFFF;  /* clamp — shouldn't happen */
+            if (pp == 0) pp = 0xFFFF;  /* clamp -- shouldn't happen */
         }
     }
     return pp;  /* next unused PP */
@@ -109,7 +109,8 @@ static uint16_t cmp_pp(const jir_mod_t *J, uint32_t fb, uint32_t nb)
 /* ---- cmp_iv: compute live intervals ---- */
 
 static void cmp_iv(const jir_mod_t *J, uint32_t fb, uint32_t nb,
-                   uint16_t *nprd, uint16_t pred[][RA_MAXP])
+                   uint16_t *nprd, uint16_t pred[][RA_MAXP],
+                   uint16_t max_pp)
 {
     g_niv = 0;
 
@@ -157,7 +158,7 @@ static void cmp_iv(const jir_mod_t *J, uint32_t fb, uint32_t nb,
 
             /* walk inline operands */
             int nops = I->n_ops;
-            if (nops == 0xFF) continue;  /* overflow — skip for now */
+            if (nops == 0xFF) continue;  /* overflow -- skip for now */
 
             for (int k = 0; k < nops; k++) {
                 uint32_t op = I->ops[k];
@@ -174,9 +175,18 @@ static void cmp_iv(const jir_mod_t *J, uint32_t fb, uint32_t nb,
                     g_iv[idx].end = use_pp;
             }
 
-            /* PHI operands: extend to end of predecessor block */
+            /* PHI operands: extend to end of predecessor block.
+             * Back-edge (pred terminates before def): value is
+             * loop-carried, extend to function end.
+             * Loop header (any pred has higher block index):
+             * extend ALL phi results to function end -- otherwise
+             * outer loop counters get clobbered by inner loops. */
             if (I->op == JIR_PHI) {
+                int is_lhdr = 0;
                 for (int k = 0; k < nops && k < (int)nprd[bi]; k++) {
+                    uint32_t pbi = pred[bi][k];
+                    if (pbi > bi) is_lhdr = 1;
+
                     uint32_t op = I->ops[k];
                     if (JIR_IS_C(op)) continue;
                     if (op >= JIR_MAX_INST) continue;
@@ -184,7 +194,6 @@ static void cmp_iv(const jir_mod_t *J, uint32_t fb, uint32_t nb,
                     if (idx < 0) continue;
 
                     /* find last inst (terminator) of predecessor */
-                    uint32_t pbi = pred[bi][k];
                     if (pbi >= J->n_blks) continue;
                     const jir_blk_t *pb = &J->blks[pbi];
                     if (pb->n_inst == 0) continue;
@@ -192,6 +201,21 @@ static void cmp_iv(const jir_mod_t *J, uint32_t fb, uint32_t nb,
                     uint16_t tpp = g_pp[term];
                     if (tpp > g_iv[idx].end)
                         g_iv[idx].end = tpp;
+                    /* back-edge: pred terminates before value is
+                     * defined → value is loop-carried. Reserve the
+                     * register from the loop header to function end
+                     * so it's not reused in the loop body. */
+                    if (tpp < g_iv[idx].start) {
+                        g_iv[idx].start = g_pp[b->first];
+                        g_iv[idx].end = max_pp;
+                    }
+                }
+                /* loop header: extend PHI result to function end
+                 * so the register survives the entire loop body */
+                if (is_lhdr) {
+                    int16_t pidx = imap[ii];
+                    if (pidx >= 0)
+                        g_iv[pidx].end = max_pp;
                 }
             }
 
@@ -235,7 +259,7 @@ static void exp_old(uint16_t point)
     for (int i = 0; i < g_nact; i++) {
         ra_iv_t *iv = &g_iv[g_act[i]];
         if (iv->end < point) {
-            /* expired — return register to free pool */
+            /* expired -- return register to free pool */
             if (iv->cls == 0) {
                 if (g_ngfr < N_GPR_POOL)
                     g_gfr[g_ngfr++] = iv->reg;
@@ -307,7 +331,7 @@ static void spl_at(int idx)
 
 static void ra_scan(void)
 {
-    /* init free pools — push in reverse so first pops first */
+    /* init free pools -- push in reverse so first pops first */
     g_ngfr = 0;
     for (int i = N_GPR_POOL - 1; i >= 0; i--)
         g_gfr[g_ngfr++] = GPR_POOL[i];
@@ -392,8 +416,9 @@ void x86_ra(const jir_mod_t *J, uint32_t fi, int8_t *rmap)
     memset(g_pp, 0, sizeof(g_pp));
     g_niv = 0;
 
-    cmp_pp(J, fb, nb);
-    cmp_iv(J, fb, nb, nprd, pred);
+    uint16_t mpp = cmp_pp(J, fb, nb);
+    if (mpp > 0) mpp--;  /* last used program point */
+    cmp_iv(J, fb, nb, nprd, pred, mpp);
     srt_iv();
     ra_scan();
 

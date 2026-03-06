@@ -253,6 +253,188 @@ static void rv_elf_out(void)
 }
 TH_REG("rv", rv_elf_out)
 
+/* ---- RV Parity Tests ----
+ * Closing the gap between x86 and RV coverage.
+ * If x86 can do it, RV should too — otherwise it's not
+ * a backend, it's a suggestion. */
+
+/* Float add → int return (FADD + FPTOSI on RV) */
+static void rv_fadd(void)
+{
+    int64_t rc = qemu_run(
+        "START T;"
+        "  ITEM X F 64 = 3.0;"
+        "  ITEM Y F 64 = 14.0;"
+        "  ITEM R F 64;"
+        "  R := X + Y;"
+        "  RETURN R;"
+        "TERM");
+    if (rc == -88888) SKIP("qemu-riscv64 not found");
+    CHEQ(rc, 17);
+    PASS();
+}
+TH_REG("rv", rv_fadd)
+
+/* Float multiply → int return (FMUL + FPTOSI) */
+static void rv_fmul(void)
+{
+    int64_t rc = qemu_run(
+        "START T;"
+        "  ITEM X F 64 = 6.0;"
+        "  ITEM Y F 64 = 7.0;"
+        "  ITEM R F 64;"
+        "  R := X * Y;"
+        "  RETURN R;"
+        "TERM");
+    if (rc == -88888) SKIP("qemu-riscv64 not found");
+    CHEQ(rc, 42);
+    PASS();
+}
+TH_REG("rv", rv_fmul)
+
+/* IF inside WHILE — accumulate evens (nested control flow) */
+static void rv_nest(void)
+{
+    int64_t rc = qemu_run(
+        "START T;"
+        "  ITEM S S 32 = 0;"
+        "  ITEM I S 32 = 1;"
+        "  WHILE I <= 10;"
+        "    IF (I MOD 2) = 0;"
+        "      S := S + I;"
+        "    END;"
+        "    I := I + 1;"
+        "  END;"
+        "  RETURN S;"
+        "TERM");
+    if (rc == -88888) SKIP("qemu-riscv64 not found");
+    CHEQ(rc, 30);
+    PASS();
+}
+TH_REG("rv", rv_nest)
+
+/* Double FOR loop — nested iteration */
+static void rv_forfor(void)
+{
+    int64_t rc = qemu_run(
+        "START T;"
+        "  ITEM S S 32 = 0;"
+        "  ITEM I S 32;"
+        "  ITEM J S 32;"
+        "  FOR I := 1 BY 1 WHILE I <= 10;"
+        "    FOR J := 1 BY 1 WHILE J <= 10;"
+        "      S := S + 1;"
+        "    END;"
+        "  END;"
+        "  RETURN S;"
+        "TERM");
+    if (rc == -88888) SKIP("qemu-riscv64 not found");
+    CHEQ(rc, 100);
+    PASS();
+}
+TH_REG("rv", rv_forfor)
+
+/* 15 variables — register pressure (RV has more GPRs than x86
+ * but we should still test that the allocator handles it) */
+static void rv_15var(void)
+{
+    int64_t rc = qemu_run(
+        "START T;"
+        "  ITEM A S 32 = 1;"
+        "  ITEM B S 32 = 2;"
+        "  ITEM C S 32 = 3;"
+        "  ITEM D S 32 = 4;"
+        "  ITEM E S 32 = 5;"
+        "  ITEM F S 32 = 6;"
+        "  ITEM G S 32 = 7;"
+        "  ITEM H S 32 = 8;"
+        "  ITEM I S 32 = 9;"
+        "  ITEM J S 32 = 10;"
+        "  ITEM K S 32 = 11;"
+        "  ITEM L S 32 = 12;"
+        "  ITEM M S 32 = 13;"
+        "  ITEM N S 32 = 14;"
+        "  ITEM O S 32 = 15;"
+        "  RETURN A+B+C+D+E+F+G+H+I+J+K+L+M+N+O;"
+        "TERM");
+    if (rc == -88888) SKIP("qemu-riscv64 not found");
+    /* 1+2+...+15 = 120, but exit codes are 0-255 unsigned */
+    CHEQ(rc, 120);
+    PASS();
+}
+TH_REG("rv", rv_15var)
+
+/* PROC calling PROC — multi-level call */
+static void rv_proc2(void)
+{
+    int64_t rc = qemu_run(
+        "START T;"
+        "  PROC ADD1(N) S 32;"
+        "  BEGIN"
+        "    RETURN N + 1;"
+        "  END;"
+        "  PROC ADD2(N) S 32;"
+        "  BEGIN"
+        "    RETURN ADD1(N) + 1;"
+        "  END;"
+        "  RETURN ADD2(40);"
+        "TERM");
+    if (rc == -88888) SKIP("qemu-riscv64 not found");
+    CHEQ(rc, 42);
+    PASS();
+}
+TH_REG("rv", rv_proc2)
+
+/* TABLE read/write on RV */
+static void rv_tbl(void)
+{
+    int64_t rc = qemu_run(
+        "START T;"
+        "  TABLE TBL(0:3);"
+        "  BEGIN"
+        "    ITEM V S 32;"
+        "  END"
+        "  TBL(0).V := 10;"
+        "  TBL(1).V := 20;"
+        "  TBL(2).V := 42;"
+        "  RETURN TBL(2).V;"
+        "TERM");
+    if (rc == -88888) SKIP("qemu-riscv64 not found");
+    CHEQ(rc, 42);
+    PASS();
+}
+TH_REG("rv", rv_tbl)
+
+/* MOD operation on RV */
+static void rv_modulo(void)
+{
+    int64_t rc = qemu_run(
+        "START T;"
+        "  RETURN 47 MOD 5;"
+        "TERM");
+    if (rc == -88888) SKIP("qemu-riscv64 not found");
+    CHEQ(rc, 2);
+    PASS();
+}
+TH_REG("rv", rv_modulo)
+
+/* GOTO/LABEL on RV */
+static void rv_goto(void)
+{
+    int64_t rc = qemu_run(
+        "START T;"
+        "  ITEM X S 32 = 0;"
+        "  GOTO SKIP;"
+        "  X := 99;"
+        "  SKIP:"
+        "  RETURN 42;"
+        "TERM");
+    if (rc == -88888) SKIP("qemu-riscv64 not found");
+    CHEQ(rc, 42);
+    PASS();
+}
+TH_REG("rv", rv_goto)
+
 /* ---- RA diagnostic ---- */
 
 static void rv_rachk(void)

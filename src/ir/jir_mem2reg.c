@@ -72,6 +72,9 @@ static uint8_t  g_hphi[JIR_MAX_BLKS];
 static uint8_t  g_inwl[JIR_MAX_BLKS];
 static uint16_t g_wl[JIR_MAX_BLKS];
 
+/* fake PHI ID → g_phi index mapping (DFS order ≠ insertion order) */
+static uint16_t g_fmap[M2R_MAXPHI];
+
 /* var_of: inst → promo var index (-1 if none) */
 static int16_t  g_vof[JIR_MAX_INST];
 
@@ -294,8 +297,10 @@ static void fnd_prm(const jir_mod_t *M, uint32_t fb, uint32_t nb,
     /* scan for ALLOCAs in function range */
     uint32_t fi = M->blks[fb].first;
     uint32_t li = fi;
-    for (uint32_t bi = fb; bi < fb + nb && bi < M->n_blks; bi++)
-        li = M->blks[bi].first + M->blks[bi].n_inst;
+    for (uint32_t bi = fb; bi < fb + nb && bi < M->n_blks; bi++) {
+        uint32_t end = M->blks[bi].first + M->blks[bi].n_inst;
+        if (end > li) li = end;
+    }
 
     for (uint32_t ii = fi; ii < li && ii < M->n_inst; ii++)
         g_vof[ii] = -1;
@@ -329,11 +334,18 @@ static void fnd_prm(const jir_mod_t *M, uint32_t fb, uint32_t nb,
             M->S->types[I->type].kind == JT_TABLE)
             continue;
 
-        /* check all uses: only LOAD(ops[0]) and STORE(ops[1]) allowed */
+        /* check all uses: only LOAD(ops[0]) and STORE(ops[1]) allowed.
+         * Skip block-ref operands of BR/BR_COND — those are block
+         * indices, not value refs, and would false-positive when a
+         * block index happens to match an alloca's inst index. */
         int ok = 1;
         for (uint32_t j = fi; j < li && j < M->n_inst; j++) {
             const jir_inst_t *U = &M->insts[j];
+            /* BR ops[0] is a block ref — skip entirely */
+            if (U->op == JIR_BR) continue;
             for (int s = 0; s < 4 && s < U->n_ops; s++) {
+                /* BR_COND ops[1..2] are block refs — skip those slots */
+                if (U->op == JIR_BR_COND && s >= 1) continue;
                 if (U->ops[s] == ii && !JIR_IS_C(U->ops[s])) {
                     if (U->op == JIR_LOAD && s == 0) continue;
                     if (U->op == JIR_STORE && s == 1) continue;
@@ -384,8 +396,10 @@ static void ins_phi(const jir_mod_t *M, uint32_t fb, uint32_t nb)
     /* first inst, last inst of function */
     uint32_t fi = M->blks[fb].first;
     uint32_t li = fi;
-    for (uint32_t bi = fb; bi < fb + nb && bi < M->n_blks; bi++)
-        li = M->blks[bi].first + M->blks[bi].n_inst;
+    for (uint32_t bi = fb; bi < fb + nb && bi < M->n_blks; bi++) {
+        uint32_t end = M->blks[bi].first + M->blks[bi].n_inst;
+        if (end > li) li = end;
+    }
 
     for (int v = 0; v < g_nvar; v++) {
         memset(g_hphi, 0, sizeof(uint8_t) * (fb + nb));
@@ -473,17 +487,18 @@ static void ren_var(jir_mod_t *M, uint32_t fb, uint32_t nb)
 {
     uint32_t fi = M->blks[fb].first;
     uint32_t li = fi;
-    for (uint32_t bi = fb; bi < fb + nb && bi < M->n_blks; bi++)
-        li = M->blks[bi].first + M->blks[bi].n_inst;
+    for (uint32_t bi = fb; bi < fb + nb && bi < M->n_blks; bi++) {
+        uint32_t end = M->blks[bi].first + M->blks[bi].n_inst;
+        if (end > li) li = end;
+    }
 
     /* clear */
+    g_fseq = 0;
     for (int v = 0; v < g_nvar; v++)
         g_rtop[v] = 0;
     memset(g_dead, 0, sizeof(uint8_t) * li);
     for (uint32_t i = fi; i < li; i++)
         g_repl[i] = 0;
-    g_fseq = 0;
-
     /* zero constant for uninitialised reads */
     uint32_t zero_c = 0;
     for (uint32_t i = 0; i < M->n_consts; i++) {
@@ -531,7 +546,10 @@ static void ren_var(jir_mod_t *M, uint32_t fb, uint32_t nb)
         for (int pi = 0; pi < g_nphi; pi++) {
             if (g_phi[pi].blk != bi) continue;
             int v = g_phi[pi].var;
-            uint32_t fid = FAKE_BASE + g_fseq++;
+            uint32_t seq = g_fseq++;
+            if (seq < M2R_MAXPHI)
+                g_fmap[seq] = (uint16_t)pi;
+            uint32_t fid = FAKE_BASE + seq;
             if (g_rtop[v] < M2R_STKSZ)
                 g_rstk[v][g_rtop[v]++] = fid;
         }
@@ -633,18 +651,16 @@ static uint32_t remap(uint32_t v, uint32_t fi, uint32_t li)
 
     if (JIR_IS_C(v)) return v;
 
-    /* fake PHI ID → look up remapped phi dst */
+    /* fake PHI ID → look up phi dst directly via g_fmap.
+     * Fake IDs are assigned in DFS order (g_fseq), g_phi[] is in
+     * DF insertion order — these differ, so we need the mapping.
+     * Return .dst directly — NOT through g_rmap, because the PHI's
+     * write position may collide with an original instruction index
+     * that has a different g_rmap entry. */
     if (v >= FAKE_BASE) {
-        /* find which phi this fake ID belongs to */
         uint32_t seq = v - FAKE_BASE;
-        /* scan phis in order — seq matches emission order */
-        uint32_t cur = 0;
-        for (int i = 0; i < g_nphi; i++) {
-            if (cur == seq) {
-                return g_rmap[g_phi[i].dst];
-            }
-            cur++;
-        }
+        if (seq < g_fseq && g_fmap[seq] < (uint32_t)g_nphi)
+            return g_phi[g_fmap[seq]].dst;
         return v; /* shouldn't happen */
     }
 
@@ -660,8 +676,10 @@ static void rewrite(jir_mod_t *M, uint32_t fb, uint32_t nb)
 {
     uint32_t fi = M->blks[fb].first;
     uint32_t li = fi;
-    for (uint32_t bi = fb; bi < fb + nb && bi < M->n_blks; bi++)
-        li = M->blks[bi].first + M->blks[bi].n_inst;
+    for (uint32_t bi = fb; bi < fb + nb && bi < M->n_blks; bi++) {
+        uint32_t end = M->blks[bi].first + M->blks[bi].n_inst;
+        if (end > li) li = end;
+    }
 
     /* copy original instructions to temp */
     uint32_t n_orig = li - fi;
@@ -698,7 +716,10 @@ static void rewrite(jir_mod_t *M, uint32_t fb, uint32_t nb)
             /* operands filled after remap pass below */
             for (int k = 0; k < P->n_ops && k < 4; k++)
                 P->ops[k] = g_phi[pi].ops[k];
-            g_rmap[wp] = wp; /* identity for PHIs */
+            /* DO NOT set g_rmap[wp] = wp here — wp may collide
+             * with an original instruction index already mapped
+             * to a different new position. PHI refs go through
+             * g_phi[].dst directly, not through g_rmap. */
             wp++;
             count++;
         }

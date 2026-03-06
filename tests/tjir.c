@@ -372,7 +372,6 @@ static void jir_cli(void)
     int rc = th_run(SK_BIN " --ir tests/fixtures/hello.jov", buf, TH_BUFSZ);
     CHEQ(rc, 0);
     CHECK(strstr(buf, "func @") != NULL);
-    CHECK(strstr(buf, "alloca") != NULL);
     CHECK(strstr(buf, "ret") != NULL);
     PASS();
 }

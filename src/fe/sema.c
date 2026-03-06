@@ -1020,8 +1020,10 @@ static void chk_stmt(sema_ctx_t *S, uint32_t nd)
             if (is_num(S, lt) && is_num(S, rt)) break;
             /* same kind is fine */
             if (lk == rk) break;
-            /* BIT <- comparison is fine */
+            /* BIT <- BIT is fine */
             if (is_bit(S, lt) && is_bit(S, rt)) break;
+            /* BIT <- integer is fine (bit pattern) */
+            if (is_bit(S, lt) && is_int(S, rt)) break;
             /* STATUS <- STATUS is fine */
             if (is_sts(S, lt) && is_sts(S, rt)) break;
             /* CHAR <- CHAR is fine */

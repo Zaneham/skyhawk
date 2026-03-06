@@ -3,6 +3,10 @@
 
 #include "tharns.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 /* ---- Storage ---- */
 
 tcase_t th_list[TH_MAXTS];
@@ -10,6 +14,85 @@ int th_cnt = 0;
 int npass  = 0;
 int nfail  = 0;
 int nskip  = 0;
+
+/* ---- Shared Pipeline Context ----
+ * One copy of the pipeline statics, shared by tfloat, tnest,
+ * tstress, and tavion. Six copies of a 6 MB struct exceeds
+ * MinGW's BSS tolerance and corrupts adjacent memory. */
+
+token_t    tp_toks[TP_MAXTOK];
+ast_node_t tp_nds[TP_MAXND];
+lexer_t    tp_lex;
+parser_t   tp_par;
+sema_ctx_t tp_sem;
+jir_mod_t  tp_jir;
+x86_mod_t  tp_x86;
+
+int tp_run(const char *src)
+{
+    uint32_t len = (uint32_t)strlen(src);
+    lexer_init(&tp_lex, src, len, tp_toks, TP_MAXTOK);
+    if (lexer_run(&tp_lex) != SK_OK) return -1;
+    parser_init(&tp_par, tp_toks, tp_lex.num_toks,
+                src, len, tp_nds, TP_MAXND);
+    if (parser_run(&tp_par) != SK_OK) return -2;
+    sema_init(&tp_sem, &tp_par);
+    if (sema_run(&tp_sem) != SK_OK) return -3;
+    jir_init(&tp_jir, &tp_sem);
+    if (jir_lower(&tp_jir) != SK_OK) return -4;
+    jir_m2r(&tp_jir);
+    x86_init(&tp_x86, &tp_jir);
+    if (x86_emit(&tp_x86) != SK_OK) return -5;
+    return 0;
+}
+
+typedef int64_t (*tp_fn_t)(void);
+
+int64_t tp_jit(uint32_t fn_idx)
+{
+#ifdef _WIN32
+    uint32_t len = tp_x86.codelen;
+    void *mem = VirtualAlloc(NULL, len,
+                             MEM_COMMIT | MEM_RESERVE,
+                             PAGE_EXECUTE_READWRITE);
+    if (!mem) return -99999;
+    memcpy(mem, tp_x86.code, len);
+    uint32_t off = tp_x86.fn_off[fn_idx];
+    tp_fn_t fn;
+    {
+        void *addr = (uint8_t *)mem + off;
+        memcpy(&fn, &addr, sizeof(fn));
+    }
+    int64_t result = fn();
+    VirtualFree(mem, 0, MEM_RELEASE);
+    return result;
+#else
+    (void)fn_idx;
+    return -99999;
+#endif
+}
+
+uint32_t tp_main(void)
+{
+    if (tp_jir.n_funcs == 0) return 0;
+    return tp_jir.n_funcs - 1;
+}
+
+int tp_fndop(int op, uint32_t from)
+{
+    for (uint32_t i = from; i < tp_jir.n_inst; i++)
+        if (tp_jir.insts[i].op == (uint16_t)op)
+            return (int)i;
+    return -1;
+}
+
+int tp_cntop(int op)
+{
+    int c = 0;
+    for (uint32_t i = 0; i < tp_jir.n_inst; i++)
+        if (tp_jir.insts[i].op == (uint16_t)op) c++;
+    return c;
+}
 
 /* ---- Utilities ---- */
 
@@ -42,7 +125,7 @@ int th_exist(const char *path)
 
 static const char *cat_order[] = {
     "smoke", "sema", "layout", "ir", "types", "compool",
-    "codegen", "encode", "rv", NULL
+    "codegen", "nest", "stress", "avionics", "encode", "rv", NULL
 };
 
 static int cat_idx(const char *cat)

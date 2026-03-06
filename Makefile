@@ -31,7 +31,8 @@ SRCS     = $(SRC_MAIN) $(SRC_FE) $(SRC_IR) $(SRC_X86) $(SRC_RV) $(SRC_CPL)
 
 # ---- Test sources ---- #
 
-TSRC     = tests/tmain.c tests/tsmoke.c tests/tparse.c tests/tsema.c tests/tjir.c tests/tx86.c tests/trv.c
+TSRC     = tests/tmain.c tests/tsmoke.c tests/tparse.c tests/tsema.c tests/tjir.c tests/tx86.c tests/trv.c \
+           tests/tfloat.c tests/tnest.c tests/tstress.c tests/tavion.c
 TSRCS    = $(TSRC) $(SRC_FE) $(SRC_IR) $(SRC_X86) $(SRC_RV) $(SRC_CPL)
 
 # ---- Targets ---- #

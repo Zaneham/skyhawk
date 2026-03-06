@@ -65,4 +65,37 @@ extern int npass, nfail, nskip;
 int th_run(const char *cmd, char *obuf, int osz);
 int th_exist(const char *path);
 
+/* ---- Shared Pipeline Context ----
+ * One 6 MB pipeline context shared by all new test files.
+ * Because having six identical copies of a 6 MB struct is
+ * the kind of thing that makes MinGW's BSS segment weep,
+ * and 36 MB of uninitialised globals turns out to be the
+ * precise amount needed to corrupt your stdout buffer. */
+
+#include "../src/skyhawk.h"
+#include "../src/fe/token.h"
+#include "../src/fe/lexer.h"
+#include "../src/fe/ast.h"
+#include "../src/fe/parser.h"
+#include "../src/fe/sema.h"
+#include "../src/ir/jir.h"
+#include "../src/x86/x86.h"
+
+#define TP_MAXTOK  4096
+#define TP_MAXND   8192
+
+extern token_t    tp_toks[];
+extern ast_node_t tp_nds[];
+extern lexer_t    tp_lex;
+extern parser_t   tp_par;
+extern sema_ctx_t tp_sem;
+extern jir_mod_t  tp_jir;
+extern x86_mod_t  tp_x86;
+
+int     tp_run(const char *src);
+int64_t tp_jit(uint32_t fn_idx);
+uint32_t tp_main(void);
+int     tp_fndop(int op, uint32_t from);
+int     tp_cntop(int op);
+
 #endif /* THARNS_H */
